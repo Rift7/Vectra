@@ -42,3 +42,12 @@ Vectra is a web-based slicer for pen plotters. Backend: Django, Celery, Channels
 
 ## Frontend
 A React + Vite SPA will live under `frontend/` (to be scaffolded in a later milestone). It will communicate via Django REST and receive live updates via Channels.
+
+## Vectorization (vtracer)
+Raster-to-vector uses the vtracer CLI. Install it and ensure it's in PATH if you plan to vectorize PNG/JPG inputs:
+- https://github.com/visioncortex/vtracer
+
+In the pipeline API, include a first step:
+```
+{"type":"vectorize","params":{"mode":"centerline"}}
+```

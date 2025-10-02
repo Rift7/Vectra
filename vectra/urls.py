@@ -14,6 +14,7 @@ urlpatterns = [
     path("health/", health, name="health"),
     path("api/", include("projects.urls")),
     path("api/", include("core.urls")),
+    path("api/", include("pipeline.urls")),
     path("api-auth/", include("rest_framework.urls")),
 ]
 
