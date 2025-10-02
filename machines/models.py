@@ -36,6 +36,25 @@ class MachineProfile(TimeStampedModel):
         )
     )
     postamble = models.TextField(default="; Vectra postamble\nM2 ; program end\n")
+    tool_change_template = models.TextField(
+        default="; --- Tool change ---\nM117 Change pen to {tool_name}\nM0 Change pen to {tool_name}\n",
+        help_text="G-code inserted when changing tools. Available placeholders: {tool_name}",
+    )
 
     def __str__(self) -> str:
         return self.name
+
+
+class Tool(TimeStampedModel):
+    profile = models.ForeignKey(MachineProfile, on_delete=models.CASCADE, related_name="tools")
+    name = models.CharField(max_length=120)
+    color_hex = models.CharField(max_length=7, default="#000000")
+    width_mm = models.FloatField(default=0.3)
+    z_down_override = models.FloatField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = [("profile", "name")]
+
+    def __str__(self) -> str:
+        return f"{self.profile.name}:{self.name}"

@@ -110,6 +110,13 @@ class EmitGcodeParams(BaseModel):
     filename: str | None = Field(None, description="Optional output filename")
 
 
+class ToolMapParams(BaseModel):
+    mappings: list[dict] = Field(
+        default_factory=list,
+        description="List of {layer:int, tool_id:int} mappings",
+    )
+
+
 def run_linesort(doc: Any, params: LineSortParams) -> Any:
     strat = params.strategy.lower()
     if strat in ("none", ""):
@@ -138,5 +145,20 @@ registry.register(
         schema=EmitGcodeParams,
         runner=run_emit_gcode,
         description="Emit Marlin G-code based on MachineProfile",
+    )
+)
+
+
+def run_tool_map(doc: Any, params: ToolMapParams) -> Any:
+    # Marker step; handled in runner
+    return doc
+
+
+registry.register(
+    StepDef(
+        type_name="tool_map",
+        schema=ToolMapParams,
+        runner=run_tool_map,
+        description="Map vpype layers to tools (pens); enables tool-change prompts",
     )
 )

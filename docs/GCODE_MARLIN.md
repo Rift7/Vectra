@@ -19,7 +19,9 @@ G-code strategy (simple, safe defaults)
 
 Endpoints
 - Manage profiles: /api/machine-profiles/
+- Manage tools (pens): /api/tools/ (each belongs to a MachineProfile)
 - Run pipelines with emit_gcode step: include {"type":"emit_gcode","params":{"machine_profile_id":<id>}}
+- Map layers to tools: add a `tool_map` step before `emit_gcode`, e.g. {"type":"tool_map","params":{"mappings":[{"layer":1,"tool_id":<tool_id>}]}}
 
 Notes
 - This is a minimal implementation; future work can add servo-based control (M280), arcs (G2/G3), acceleration tuning, and firmware-specific quirks.

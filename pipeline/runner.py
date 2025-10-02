@@ -79,6 +79,7 @@ def run_pipeline(asset_path: Path, steps: Iterable[Dict[str, Any]]) -> PipelineR
 
     # Track emit_gcode params if present
     emit_params = None
+    layer_tool_map: dict[int, int] = {}
     steps_collect: List[Dict[str, Any]] = []
 
     for step_obj in steps_iter:
@@ -88,6 +89,15 @@ def run_pipeline(asset_path: Path, steps: Iterable[Dict[str, Any]]) -> PipelineR
             continue
         if sd.type_name.lower() == "emit_gcode":
             emit_params = params
+            executed.append(sd.type_name)
+            continue
+        if sd.type_name.lower() == "tool_map":
+            # params.mappings: list of {layer:int, tool_id:int}
+            try:
+                for m in params.mappings:
+                    layer_tool_map[int(m["layer"])] = int(m["tool_id"])  # type: ignore[index]
+            except Exception as exc:  # pragma: no cover
+                raise PipelineExecutionError(f"invalid tool_map params: {exc}")
             executed.append(sd.type_name)
             continue
         try:
@@ -111,7 +121,7 @@ def run_pipeline(asset_path: Path, steps: Iterable[Dict[str, Any]]) -> PipelineR
             profile = MachineProfile.objects.get(id=emit_params.machine_profile_id)
         except MachineProfile.DoesNotExist:
             raise PipelineExecutionError("MachineProfile not found for emit_gcode step")
-        gcode = generate_gcode(doc, profile)
+        gcode = generate_gcode(doc, profile, layer_tool_map=layer_tool_map or None)
         gcode_dir = out_dir
         fname = emit_params.filename or f"output_{asset_path.stem}.gcode"
         gcode_path = gcode_dir / fname

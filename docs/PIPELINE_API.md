@@ -28,6 +28,9 @@ Machine profiles
 - Create and manage via /api/machine-profiles/
 - Reference the profile id in the emit_gcode step params
 - Output will include an SVG artifact and, if emit_gcode is present, a .gcode artifact
+- To map layers to tools (pens) and insert pen-change pauses, add a tool_map step before emit_gcode:
+  {"type":"tool_map","params":{"mappings":[{"layer":1,"tool_id":10},{"layer":2,"tool_id":11}]}}
+  Where tool_id references /api/tools/ items belonging to the selected MachineProfile.
 
 Notes
 - SVG input works out of the box. For PNG/JPG input, include a first step of type `vectorize` which uses the vtracer CLI to create an SVG before subsequent steps.

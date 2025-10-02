@@ -16,7 +16,7 @@ def _format_float(x: float) -> str:
     return ("%.4f" % x).rstrip("0").rstrip(".")
 
 
-def generate_gcode(doc, profile: MachineProfile) -> str:  # type: ignore[no-untyped-def]
+def generate_gcode(doc, profile: MachineProfile, layer_tool_map: dict[int, int] | None = None) -> str:  # type: ignore[no-untyped-def]
     if vpype is None:
         raise RuntimeError("vpype not installed")
 
@@ -40,7 +40,25 @@ def generate_gcode(doc, profile: MachineProfile) -> str:  # type: ignore[no-unty
     # Ensure pen up at start
     lines.append(f"G1 Z{z_up} F{travel_f}")
 
+    # Track current tool to insert change prompts
+    current_tool_id: int | None = None
+
     for layer_id, lc in doc.layers.items():
+        # Handle tool change per layer if mapping provided
+        if layer_tool_map and layer_id in layer_tool_map:
+            tool_id = layer_tool_map[layer_id]
+            if tool_id != current_tool_id:
+                # Find tool
+                tool = profile.tools.filter(id=tool_id).first()
+                tool_name = tool.name if tool else f"Tool {tool_id}"
+                # Insert tool-change template
+                if profile.tool_change_template:
+                    lines.append(profile.tool_change_template.format(tool_name=tool_name).strip())
+                # Apply per-tool z_down if available
+                if tool and tool.z_down_override is not None:
+                    z_down = _format_float(tool.z_down_override)
+                current_tool_id = tool_id
+
         # lc is a LineCollection
         for arr in lc:
             if len(arr) == 0:
