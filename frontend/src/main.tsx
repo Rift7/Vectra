@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { PreviewCanvas } from './components/PreviewCanvas'
+import { StrokePlayer } from './components/StrokePlayer'
 
 function App() {
   const [assetId, setAssetId] = useState('')
@@ -52,7 +53,13 @@ function App() {
         <button onClick={connectAndRun}>Run</button>
       </div>
       <h2>Preview</h2>
-      <PreviewCanvas svgUrl={svgUrl} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+        <StrokePlayer svgUrl={svgUrl} />
+        <details>
+          <summary>Canvas raster preview (alternative)</summary>
+          <PreviewCanvas svgUrl={svgUrl} />
+        </details>
+      </div>
       <h2>Events</h2>
       <pre style={{ background: '#111', color: '#0f0', padding: '1rem', height: 300, overflow: 'auto' }}>{logs.join('\n')}</pre>
     </div>
