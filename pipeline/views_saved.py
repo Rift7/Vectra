@@ -76,11 +76,17 @@ class PipelineViewSet(viewsets.ModelViewSet):
         run.status = PipelineRun.Status.SUCCEEDED
         run.save(update_fields=["steps_executed", "duration_ms", "status", "updated_at"])
 
-        # attach artifact by copying output into storage
+        # attach SVG artifact
         from .models import RunArtifact
         with open(result.output_svg_path, "rb") as f:
             artifact = RunArtifact(run=run, kind=RunArtifact.Kind.SVG)
             artifact.file.save(result.output_svg_path.name, DjangoFile(f), save=True)
+
+        # attach G-code artifact if present
+        if result.output_gcode_path and result.output_gcode_path.exists():
+            with open(result.output_gcode_path, "rb") as f:
+                artifact = RunArtifact(run=run, kind=RunArtifact.Kind.GCODE)
+                artifact.file.save(result.output_gcode_path.name, DjangoFile(f), save=True)
 
         serializer = PipelineRunRecordSerializer(run, context={"request": request})
         return Response(serializer.data)

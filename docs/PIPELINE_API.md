@@ -18,10 +18,16 @@ Request body (JSON):
     {"type": "scale", "params": {"sx": 0.5}},
     {"type": "simplify", "params": {"tolerance": 0.2}},
     {"type": "linemerge", "params": {"enabled": true}},
-    {"type": "linesort", "params": {"strategy": "nearest"}}
+    {"type": "linesort", "params": {"strategy": "nearest"}},
+    {"type": "emit_gcode", "params": {"machine_profile_id": 1}}
   ]
 }
 ```
+
+Machine profiles
+- Create and manage via /api/machine-profiles/
+- Reference the profile id in the emit_gcode step params
+- Output will include an SVG artifact and, if emit_gcode is present, a .gcode artifact
 
 Notes
 - SVG input works out of the box. For PNG/JPG input, include a first step of type `vectorize` which uses the vtracer CLI to create an SVG before subsequent steps.

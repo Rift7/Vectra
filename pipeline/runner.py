@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, List
 from django.conf import settings
 
 from .registry import registry
+from typing import Optional
 
 try:
     import vpype
@@ -21,6 +22,7 @@ except Exception:  # pragma: no cover
 class PipelineResult:
     output_svg_path: Path
     steps_executed: List[str]
+    output_gcode_path: Optional[Path] = None
 
 
 class PipelineExecutionError(Exception):
@@ -75,10 +77,17 @@ def run_pipeline(asset_path: Path, steps: Iterable[Dict[str, Any]]) -> PipelineR
     # Start with document loaded from SVG
     doc = read_svg(str(asset_path))
 
+    # Track emit_gcode params if present
+    emit_params = None
+    steps_collect: List[Dict[str, Any]] = []
+
     for step_obj in steps_iter:
         sd, params = registry.parse(step_obj)
-        # skip 'import' since we've already created the document
         if sd.type_name.lower() == "import":
+            executed.append(sd.type_name)
+            continue
+        if sd.type_name.lower() == "emit_gcode":
+            emit_params = params
             executed.append(sd.type_name)
             continue
         try:
@@ -92,4 +101,20 @@ def run_pipeline(asset_path: Path, steps: Iterable[Dict[str, Any]]) -> PipelineR
     out_path = out_dir / f"output_{asset_path.stem}.svg"
     write_svg(doc, str(out_path))
 
-    return PipelineResult(output_svg_path=out_path, steps_executed=executed)
+    gcode_path = None
+    if emit_params is not None:
+        # generate G-code using machine profile
+        from machines.models import MachineProfile
+        from machines.marlin import generate_gcode
+
+        try:
+            profile = MachineProfile.objects.get(id=emit_params.machine_profile_id)
+        except MachineProfile.DoesNotExist:
+            raise PipelineExecutionError("MachineProfile not found for emit_gcode step")
+        gcode = generate_gcode(doc, profile)
+        gcode_dir = out_dir
+        fname = emit_params.filename or f"output_{asset_path.stem}.gcode"
+        gcode_path = gcode_dir / fname
+        gcode_path.write_text(gcode)
+
+    return PipelineResult(output_svg_path=out_path, steps_executed=executed, output_gcode_path=gcode_path)

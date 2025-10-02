@@ -105,6 +105,11 @@ class LineSortParams(BaseModel):
     strategy: str = Field("none", description="Strategy: none|nearest|2opt|tsp")
 
 
+class EmitGcodeParams(BaseModel):
+    machine_profile_id: int
+    filename: str | None = Field(None, description="Optional output filename")
+
+
 def run_linesort(doc: Any, params: LineSortParams) -> Any:
     strat = params.strategy.lower()
     if strat in ("none", ""):
@@ -118,5 +123,20 @@ registry.register(
         schema=LineSortParams,
         runner=run_linesort,
         description="Sort lines to reduce travel (nearest, 2opt, tsp)",
+    )
+)
+
+
+def run_emit_gcode(doc: Any, params: EmitGcodeParams) -> Any:
+    # Side-effect handled in runner after all geometry ops; this is a marker step
+    return doc
+
+
+registry.register(
+    StepDef(
+        type_name="emit_gcode",
+        schema=EmitGcodeParams,
+        runner=run_emit_gcode,
+        description="Emit Marlin G-code based on MachineProfile",
     )
 )

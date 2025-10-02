@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "core",
     "projects",
     "pipeline",
+    "machines",
 ]
 
 MIDDLEWARE = [
