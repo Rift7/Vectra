@@ -2,15 +2,15 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
+from uuid import uuid4
 
 from channels.generic.websocket import AsyncWebsocketConsumer
-from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.shortcuts import get_object_or_404
 
 from projects.models import Asset
-from pipeline.runner import PipelineExecutionError, run_pipeline
+from pipeline.tasks import run_pipeline_via_celery
 
 
 class PreviewConsumer(AsyncWebsocketConsumer):
@@ -42,44 +42,26 @@ class PreviewConsumer(AsyncWebsocketConsumer):
 
         user = self.scope["user"]
 
-        # Look up asset and basic permission: owner or collaborator
+        # Lightweight permission pre-check (asset exists)
         asset = await asyncio.to_thread(lambda: get_object_or_404(Asset, id=asset_id))
-        project = asset.project
-        is_member = await asyncio.to_thread(
-            lambda: project.owner_id == user.id or project.collaborators.filter(id=user.id).exists()
-        )
-        if not is_member:
-            await self.send_json({"event": "error", "message": "Forbidden"})
-            return
 
-        await self.send_json({"event": "start", "asset_id": asset_id})
+        # Join a unique group for this preview run
+        group_name = f"preview_{user.id}_{uuid4().hex}"
+        await self.channel_layer.group_add(group_name, self.channel_name)
 
-        def progress_cb(evt: Dict[str, Any]) -> None:
-            # Fire-and-forget send; schedule on loop
-            asyncio.get_running_loop().create_task(self.send_json(evt))
+        # Enqueue Celery task
+        run_pipeline_via_celery.delay(asset_id=asset_id, steps=steps, user_id=user.id, group_name=group_name)
 
-        try:
-            result = await asyncio.to_thread(
-                lambda: run_pipeline(Path(asset.file.path), steps, progress_cb=progress_cb)
-            )
-        except PipelineExecutionError as exc:
-            await self.send_json({"event": "error", "message": str(exc)})
-            return
-
-        # Build URLs (relative)
-        svg_rel = f"/media/{result.output_svg_path.relative_to(result.output_svg_path.parents[1])}"
-        data: Dict[str, Any] = {
-            "event": "completed",
-            "steps": result.steps_executed,
-            "output_svg_url": svg_rel,
-        }
-        if result.output_gcode_path:
-            data["output_gcode_url"] = f"/media/{result.output_gcode_path.relative_to(result.output_gcode_path.parents[1])}"
-        await self.send_json(data)
+        await self.send_json({"event": "queued", "group": group_name})
 
     async def disconnect(self, code: int):
-        # Nothing specific for now
+        # Leave all groups automatically handled by Channels when connection closes
         return
+
+    async def preview_event(self, event: Dict[str, Any]):
+        # Receive events from Celery task via group_send
+        payload = event.get("payload", {})
+        await self.send_json(payload)
 
     async def send_json(self, content: Dict[str, Any]):
         await self.send(text_data=json.dumps(content))

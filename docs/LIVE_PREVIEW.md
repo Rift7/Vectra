@@ -25,4 +25,8 @@ Frontend (dev)
 - Open http://localhost:5173 and provide asset_id and steps JSON.
 
 Notes
-- For production, move pipeline execution to Celery and push progress via Channels groups; this MVP runs the pipeline in a worker thread from the WebSocket consumer.
+- Now uses Celery tasks for execution and Channels groups for progress streaming. Make sure a Celery worker is running:
+  ```bash
+  celery -A vectra worker -l info
+  ```
+- WebSocket receives events: connected, queued, start, status, step, artifact, completed, error.

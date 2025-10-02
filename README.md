@@ -48,6 +48,11 @@ Dev:
 - Ensure you are logged in at /api-auth/login/ (same browser) so the WebSocket is authenticated
 - The dev server proxies API (/api, /media) and WebSocket (/ws) to Django
 
+Live preview requires a Celery worker running:
+```bash
+celery -A vectra worker -l info
+```
+
 ## Vectorization (vtracer)
 Raster-to-vector uses the vtracer CLI. Install it and ensure it's in PATH if you plan to vectorize PNG/JPG inputs:
 - https://github.com/visioncortex/vtracer
