@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     "projects",
     "pipeline",
     "machines",
+   "preview",
 ]
 
 MIDDLEWARE = [

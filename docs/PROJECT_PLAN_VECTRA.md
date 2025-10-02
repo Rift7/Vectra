@@ -111,23 +111,30 @@ Vectra is a web-based “slicer for plotters” that converts images and vectors
 - Time estimation: derive from segment lengths and feed rates; include lifts and tool changes
 
 Current status
-- Not started — planned next after pipeline persistence
+- Marlin basic implemented: MachineProfile, Tool, emit_gcode, tool_map with pen-change pauses and validation
+- GRBL post-processor: planned next
+- Enhancements pending: servo (M280) support, per-tool/layer feed overrides, acceleration tuning
 
 ## Progress Update
 
 Completed
 - Milestone 1: Backend bootstrap (Django 5, DRF, Celery, Channels), core models (Project, Asset), media serving, auth, admin.
 - DRF APIs for projects, assets; Celery ping endpoints; local dev docs.
-
-In Progress (Milestone 2)
 - Pipeline app with step registry (Pydantic), runner, and DRF endpoint.
 - Steps implemented: import, scale, simplify, linemerge, linesort.
 - Raster vectorization: vtracer CLI integrated as a first pipeline step for PNG/JPG.
+- Pipeline persistence and run history: saved Pipeline/Steps, PipelineRun, RunArtifact; endpoints for create/update/run/list.
+- Marlin post-processor: MachineProfile + Tool models, emit_gcode pipeline step, layer->tool mapping via tool_map, pen-change pauses, per-tool z_down override, validation of tool ownership.
+
+In Progress
+- GRBL post-processor design
+- Live preview backend and SPA scaffolding
+- Job orchestration via Celery and run metrics/logging
 
 Planned Next
-- Persist pipeline definitions/runs and Artifact tracking.
-- Marlin post-processor and machine profiles.
-- Live preview backend and SPA scaffolding.
+- Live preview (Channels) and canvas UI + SPA scaffold
+- GRBL post-processor and firmware feature parity
+- Jobs history UI, comparisons, and metrics dashboards
 
 ## Live Preview Design
 - Backend generates simplified polylines per path segment with timestamps
@@ -162,14 +169,14 @@ Planned Next
 ## Milestones & Timeline (updated)
 1) Week 1: Project bootstrap (Django, Postgres, Redis, Celery, Channels). Basic models, auth, projects, assets. [DONE]
 2) Week 2: vpype integration skeleton; step registry; Pydantic schemas; basic ops (import, scale, simplify). [DONE]
-3) Week 3: Raster vectorization with vtracer; add optimization steps (linemerge, linesort); basic pipeline API. [IN PROGRESS]
-4) Week 4: Artifacts storage for pipeline runs and comparisons; begin G-code post-processing (Marlin).
-5) Week 5: Machine profiles and Marlin post-processor completion; layer/tool mapping; pre/postamble templates.
-6) Week 6: Live preview backend (Channels) and canvas UI; progressive updates.
-7) Week 7: Artistic ops (hatch, stipple/halftone) and multi-tool flow.
-8) Week 8: Jobs history, comparisons, metrics, polish.
-9) Week 9: Test hardening, perf tuning, docs, sample presets.
-10) Week 10: Beta release, feedback, and backlog grooming.
+3) Week 3: Raster vectorization with vtracer; optimization steps (linemerge, linesort); pipeline API. [DONE]
+4) Week 4: Pipeline persistence (runs, artifacts) and begin G-code post-processing. [DONE]
+5) Week 5: Machine profiles and Marlin post-processor; tool/layer mapping and pen-change pauses. [DONE]
+6) Week 6: Live preview backend (Channels) and canvas UI; progressive updates. [NEXT]
+7) Week 7: Artistic ops (hatch, stipple/halftone) and multi-tool flow. [NEXT]
+8) Week 8: Jobs history UI, comparisons, metrics, polish. [NEXT]
+9) Week 9: Test hardening, perf tuning, docs, sample presets. [NEXT]
+10) Week 10: Beta release, feedback, and backlog grooming. [NEXT]
 
 ## Risks & Mitigations
 - Raster-to-vector quality variability: provide multiple vectorizers and tunable params; preview modes.
@@ -193,13 +200,14 @@ Done
 - Pipeline API endpoint to run steps and produce output SVG
 
 In Progress
-- Vectorization via vtracer (CLI) integrated in pipeline runner (raster -> SVG)
+- Live preview backend (Channels) and SPA scaffolding (plan/design)
+- GRBL post-processor design
+- Job orchestration via Celery and run metrics/logging
 
 Next
-- Persist pipeline definitions and runs (models, artifacts)
-- Marlin post-processor and machine profiles
-- Live preview backend (Channels) and simple canvas UI
-- Job orchestration and artifact persistence
+- Implement live preview (Channels) and a minimal SPA screen
+- Implement GRBL post-processor and firmware feature flags
+- Jobs history UI, comparisons, metrics dashboards
 - Basic SPA to assemble pipeline and run jobs
 
 ## Appendix: vpype Ops Mapping (examples)

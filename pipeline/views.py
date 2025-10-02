@@ -8,13 +8,13 @@ from rest_framework.response import Response
 
 from projects.models import Asset
 from .runner import PipelineExecutionError, run_pipeline
-from .serializers import PipelineRunSerializer
+from .serializers import PipelineRunRequestSerializer
 
 
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def run_pipeline_view(request):
-    serializer = PipelineRunSerializer(data=request.data)
+    serializer = PipelineRunRequestSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     asset_id = serializer.validated_data["asset_id"]
     steps = serializer.validated_data["steps"]

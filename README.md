@@ -41,7 +41,12 @@ Vectra is a web-based slicer for pen plotters. Backend: Django, Celery, Channels
 - Media: stored locally under MEDIA_ROOT (./media by default).
 
 ## Frontend
-A React + Vite SPA will live under `frontend/` (to be scaffolded in a later milestone). It will communicate via Django REST and receive live updates via Channels.
+A React + Vite SPA lives under `frontend/`. It communicates via Django REST and receives live updates via Channels.
+
+Dev:
+- cd frontend && npm install && npm run dev
+- Ensure you are logged in at /api-auth/login/ (same browser) so the WebSocket is authenticated
+- The dev server proxies API (/api, /media) and WebSocket (/ws) to Django
 
 ## Vectorization (vtracer)
 Raster-to-vector uses the vtracer CLI. Install it and ensure it's in PATH if you plan to vectorize PNG/JPG inputs:
