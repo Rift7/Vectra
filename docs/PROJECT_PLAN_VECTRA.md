@@ -61,7 +61,7 @@ Vectra is a web-based “slicer for plotters” that converts images and vectors
 ## Architecture Overview
 - Backend: Django 5 (Python 3.11+), PostgreSQL, Redis, Celery, Django Channels (WebSockets)
 - Vector pipeline: vpype Python API used as a library; plugin ops wrapped behind typed parameter schemas
-- Image processing: Pillow/OpenCV for raster filters; vtracer/potrace for vectorization
+- Image processing: Pillow/OpenCV for raster filters; vtracer (default; potrace deferred) for vectorization
 - G-code: pluggable post-processing layer with profile-specific templates and unit handling
 - Frontend: SPA (React + Vite) backed by Django REST + Channels; Django Admin for internal administration
 
@@ -110,6 +110,25 @@ Vectra is a web-based “slicer for plotters” that converts images and vectors
 - Path planning: respect layer-to-tool mapping; minimize lifts; handle safe Z moves
 - Time estimation: derive from segment lengths and feed rates; include lifts and tool changes
 
+Current status
+- Not started — planned next after pipeline persistence
+
+## Progress Update
+
+Completed
+- Milestone 1: Backend bootstrap (Django 5, DRF, Celery, Channels), core models (Project, Asset), media serving, auth, admin.
+- DRF APIs for projects, assets; Celery ping endpoints; local dev docs.
+
+In Progress (Milestone 2)
+- Pipeline app with step registry (Pydantic), runner, and DRF endpoint.
+- Steps implemented: import, scale, simplify, linemerge, linesort.
+- Raster vectorization: vtracer CLI integrated as a first pipeline step for PNG/JPG.
+
+Planned Next
+- Persist pipeline definitions/runs and Artifact tracking.
+- Marlin post-processor and machine profiles.
+- Live preview backend and SPA scaffolding.
+
 ## Live Preview Design
 - Backend generates simplified polylines per path segment with timestamps
 - WebSocket channel streams batches: {path_id, points[], pen_state, t0, t1}
@@ -140,14 +159,14 @@ Vectra is a web-based “slicer for plotters” that converts images and vectors
 - Metrics: total path length, segments, lifts, estimated time vs actual
 - Error reporting (Sentry)
 
-## Milestones & Timeline (indicative, 10 weeks)
-1) Week 1: Project bootstrap (Django, Postgres, Redis, Celery, Channels). Basic models, auth, projects, assets.
-2) Week 2: vpype integration skeleton; step registry; Pydantic schemas; a handful of basic ops (import, scale, simplify).
-3) Week 3: Raster filters + vectorization (vtracer/potrace). Basic pipeline UI (build steps, set params).
-4) Week 4: Core optimizations (linemerge, linesort, dedupe) and artifacts storage.
-5) Week 5: Post-processors (GRBL/Marlin) and machine profiles.
+## Milestones & Timeline (updated)
+1) Week 1: Project bootstrap (Django, Postgres, Redis, Celery, Channels). Basic models, auth, projects, assets. [DONE]
+2) Week 2: vpype integration skeleton; step registry; Pydantic schemas; basic ops (import, scale, simplify). [DONE]
+3) Week 3: Raster vectorization with vtracer; add optimization steps (linemerge, linesort); basic pipeline API. [IN PROGRESS]
+4) Week 4: Artifacts storage for pipeline runs and comparisons; begin G-code post-processing (Marlin).
+5) Week 5: Machine profiles and Marlin post-processor completion; layer/tool mapping; pre/postamble templates.
 6) Week 6: Live preview backend (Channels) and canvas UI; progressive updates.
-7) Week 7: Artistic ops (hatch, stipple/halftone) and tool/layer mapping; multi-tool flow.
+7) Week 7: Artistic ops (hatch, stipple/halftone) and multi-tool flow.
 8) Week 8: Jobs history, comparisons, metrics, polish.
 9) Week 9: Test hardening, perf tuning, docs, sample presets.
 10) Week 10: Beta release, feedback, and backlog grooming.
@@ -159,21 +178,29 @@ Vectra is a web-based “slicer for plotters” that converts images and vectors
 - Web preview performance: level-of-detail rendering; chunked streaming; requestAnimationFrame scheduling.
 
 ## Open Questions
-- Which vectorizer(s) do we prefer for MVP (vtracer vs potrace)?
-- Required plotter firmwares for launch (GRBL only or include Marlin)?
-- Do we need HPGL in V1 or defer to V2?
-- Frontend approach: HTMX-first vs small SPA for the preview-heavy pages?
-- Storage backend: local disk vs S3-compatible for artifacts?
+- Vectorizer: vtracer is default; keep potrace as optional future integration?
+- Firmware: Marlin first, GRBL later — confirm GRBL priority and timing.
+- HPGL: defer to V2 unless a strong need arises.
+- Frontend: SPA (React + Vite) confirmed — confirm when to scaffold.
+- Storage backend: local disk for now; S3-compatible later for artifacts.
 
-## Initial Backlog (MVP scope)
+## Backlog Status (MVP)
+
+Done
 - Bootstrap Django project and core apps
-- Implement Asset storage and SVG/PNG import
-- Step registry with 3 ops: import, simplify, linesort
-- GRBL post-processor with pen-up/down via Z moves
-- Machine profile model with defaults and pre/postamble
-- Live preview rendering for simple paths
+- Implement Asset storage and SVG import (PNG/JPG upload supported, vectorization via vtracer step)
+- Step registry with ops: import, scale, simplify, linemerge, linesort
+- Pipeline API endpoint to run steps and produce output SVG
+
+In Progress
+- Vectorization via vtracer (CLI) integrated in pipeline runner (raster -> SVG)
+
+Next
+- Persist pipeline definitions and runs (models, artifacts)
+- Marlin post-processor and machine profiles
+- Live preview backend (Channels) and simple canvas UI
 - Job orchestration and artifact persistence
-- Basic UI to assemble pipeline and run job
+- Basic SPA to assemble pipeline and run jobs
 
 ## Appendix: vpype Ops Mapping (examples)
 - simplify: tolerance -> vpype.simplify(tol)

@@ -29,9 +29,7 @@ class ImportParams(BaseModel):
 
 
 def run_import(doc: Any, params: ImportParams) -> Any:
-    if vpype is None or read_svg is None:
-        raise RuntimeError("vpype is not installed. Please install 'vpype' to use pipeline steps.")
-    # doc is ignored; we create a new Document from file path later in runner
+    # No-op: document import is handled in the runner; this step exists for UI/pipeline clarity
     return doc
 
 

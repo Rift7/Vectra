@@ -1,6 +1,13 @@
 # Pipeline API (Milestone 2 skeleton)
 
-POST /api/pipeline/run/
+POST /api/pipelines/  (create a saved pipeline)
+GET /api/pipelines/   (list)
+GET /api/pipelines/{id}/
+PUT /api/pipelines/{id}/  (update including steps)
+POST /api/pipelines/{id}/run/  (run a saved pipeline on an asset)
+GET /api/pipeline-runs/  (list recent runs)
+
+POST /api/pipeline/run/   (adhoc run without saving)
 
 Request body (JSON):
 ```
