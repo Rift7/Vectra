@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pathlib import Path
+from fastapi.responses import PlainTextResponse
 
 from models.schemas import GcodeResponse, GcodeRequest
 from services.storage import (
@@ -39,7 +40,7 @@ def generate_gcode(payload: GcodeRequest):
     return GcodeResponse(gcode_id=gcode_id)
 
 
-@router.get("/gcode/{project_id}/{gcode_id}")
+@router.get("/gcode/{project_id}/{gcode_id}", response_class=PlainTextResponse)
 def get_gcode(project_id: str, gcode_id: str):
     output_path = find_output_file(project_id, gcode_id)
     if output_path is None:

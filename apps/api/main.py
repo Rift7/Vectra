@@ -8,6 +8,8 @@ from routes.process import router as process_router
 from routes.optimize import router as optimize_router
 from routes.gcode import router as gcode_router
 from routes.preview import router as preview_router
+from routes.presets import router as presets_router
+from routes.jobs import router as jobs_router
 
 app = FastAPI(title="Vectra API", version="0.1.0")
 
@@ -26,3 +28,5 @@ app.include_router(process_router, prefix="/api")
 app.include_router(optimize_router, prefix="/api")
 app.include_router(gcode_router, prefix="/api")
 app.include_router(preview_router, prefix="/api")
+app.include_router(presets_router, prefix="/api")
+app.include_router(jobs_router, prefix="/api")

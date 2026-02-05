@@ -16,6 +16,20 @@ type PreviewFrame = {
   pen: string;
 };
 
+type JobStatus = {
+  job_id: string;
+  status: "queued" | "running" | "completed" | "failed";
+  progress: number;
+  message: string;
+  result?: {
+    ingest_svg_id?: string | null;
+    processed_svg_id?: string | null;
+    gcode_id?: string | null;
+    source_kind?: string | null;
+  } | null;
+  error?: string | null;
+};
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string>("Idle");
@@ -29,13 +43,39 @@ export default function Home() {
   const [penUpCmd, setPenUpCmd] = useState("M5");
   const [penDwell, setPenDwell] = useState(0.1);
   const [verticalFlip, setVerticalFlip] = useState(true);
+  const [vMode, setVMode] = useState("color");
+  const [vColorMode, setVColorMode] = useState("color");
+  const [vHierarchical, setVHierarchical] = useState(false);
+  const [vFilterSpeckle, setVFilterSpeckle] = useState(4);
+  const [vColorPrecision, setVColorPrecision] = useState(6);
+  const [vLengthThreshold, setVLengthThreshold] = useState(4);
+  const [vCornerThreshold, setVCornerThreshold] = useState(60);
+  const [vSegmentLength, setVSegmentLength] = useState(4);
+  const [vSpiro, setVSpiro] = useState(true);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [presetName, setPresetName] = useState("");
+  const [presets, setPresets] = useState<
+    Array<{
+      name: string;
+      mode: string;
+      colormode: string;
+      hierarchical: boolean;
+      filter_speckle: number;
+      color_precision: number;
+      length_threshold: number;
+      corner_threshold: number;
+      segment_length: number;
+      spiro: boolean;
+    }>
+  >([]);
   const [view, setView] = useState({ x: 0, y: 0, scale: 1 });
   const [panning, setPanning] = useState(false);
   const [lastPoint, setLastPoint] = useState<{ x: number; y: number } | null>(
     null
   );
+  const [jobProgress, setJobProgress] = useState(0);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const fitToPaper = () => {
     if (!canvasRef.current || !svgSize) return;
@@ -259,7 +299,15 @@ export default function Home() {
       return;
     }
 
+    const canPreviewDirect = !file.name.toLowerCase().endsWith(".svg");
     setStatus("Uploading...");
+    setJobProgress(0);
+    setPreview([]);
+    setGcodeStrokes([]);
+    setMeta(null);
+    setPlayhead(0);
+    setPlaying(false);
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -270,60 +318,118 @@ export default function Home() {
 
     if (!uploadRes.ok) {
       setStatus("Upload failed.");
+      setJobProgress(0);
       return;
     }
 
     const uploadData = await uploadRes.json();
-    setStatus("Processing with vpype...");
-
-    const processRes = await fetch(`${API_BASE_URL}/api/process`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        project_id: uploadData.project_id,
-        file_id: uploadData.file_id
-      })
-    });
-    if (!processRes.ok) {
-      setStatus("vpype processing failed.");
-      return;
+    setProjectId(uploadData.project_id);
+    try {
+      const presetsRes = await fetch(
+        `${API_BASE_URL}/api/presets/vectorize/${uploadData.project_id}`
+      );
+      if (presetsRes.ok) {
+        const presetsData = await presetsRes.json();
+        setPresets(presetsData.presets || []);
+      }
+    } catch {
+      setPresets([]);
     }
-    const processData = await processRes.json();
 
-    const gcodeRes = await fetch(`${API_BASE_URL}/api/gcode`, {
+    const startJobRes = await fetch(`${API_BASE_URL}/api/jobs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         project_id: uploadData.project_id,
-        svg_id: processData.svg_id,
+        file_id: uploadData.file_id,
+        filename: uploadData.filename,
+        mode: vMode,
+        colormode: vColorMode,
+        hierarchical: vHierarchical,
+        filter_speckle: vFilterSpeckle,
+        color_precision: vColorPrecision,
+        length_threshold: vLengthThreshold,
+        corner_threshold: vCornerThreshold,
+        segment_length: vSegmentLength,
+        spiro: vSpiro,
         pen_down_cmd: penDownCmd,
         pen_up_cmd: penUpCmd,
         pen_dwell_s: penDwell,
         vertical_flip: verticalFlip
       })
     });
-    if (!gcodeRes.ok) {
-      setStatus("G-code generation failed.");
+
+    if (!startJobRes.ok) {
+      setStatus("Failed to start job.");
+      setJobProgress(0);
       return;
     }
-    const gcodeData = await gcodeRes.json();
 
-    const gcodeTextRes = await fetch(
-      `${API_BASE_URL}/api/gcode/${uploadData.project_id}/${gcodeData.gcode_id}`
-    );
-    if (gcodeTextRes.ok) {
-      const gcodeText = await gcodeTextRes.text();
-      const strokes = parseGcode(gcodeText);
-      setGcodeStrokes(strokes);
+    const startedJob = (await startJobRes.json()) as JobStatus;
+    let seenSvgId: string | null = null;
+    let finalJob = startedJob;
+
+    while (true) {
+      const pollRes = await fetch(`${API_BASE_URL}/api/jobs/${startedJob.job_id}`);
+      if (!pollRes.ok) {
+        setStatus("Job polling failed.");
+        setJobProgress(0);
+        return;
+      }
+      const polled = (await pollRes.json()) as JobStatus;
+      finalJob = polled;
+      setJobProgress(polled.progress);
+      setStatus(polled.message);
+
+      const maybeSvgId = polled.result?.ingest_svg_id;
+      if (canPreviewDirect && maybeSvgId && maybeSvgId !== seenSvgId) {
+        const svgRes = await fetch(
+          `${API_BASE_URL}/api/svg/${uploadData.project_id}/${maybeSvgId}`
+        );
+        if (svgRes.ok) {
+          const svgText = await svgRes.text();
+          setSvgMarkup(svgText);
+          setSvgSize(parseSvgSize(svgText));
+          seenSvgId = maybeSvgId;
+        }
+      }
+
+      if (polled.status === "completed" || polled.status === "failed") {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 700));
     }
 
-    setStatus("Building preview...");
+    if (finalJob.status === "failed") {
+      setStatus(finalJob.error ? `Job failed: ${finalJob.error}` : "Job failed");
+      setJobProgress(100);
+      return;
+    }
+
+    const finalGcodeId = finalJob.result?.gcode_id;
+    if (!finalGcodeId) {
+      setStatus("Completed without G-code output.");
+      setJobProgress(100);
+      return;
+    }
+
+    const gcodeTextRes = await fetch(
+      `${API_BASE_URL}/api/gcode/${uploadData.project_id}/${finalGcodeId}`
+    );
+    if (!gcodeTextRes.ok) {
+      setStatus("Failed to fetch G-code.");
+      setJobProgress(100);
+      return;
+    }
+    const gcodeText = await gcodeTextRes.text();
+    setGcodeStrokes(parseGcode(gcodeText));
 
     const previewRes = await fetch(
-      `${API_BASE_URL}/api/preview/${uploadData.project_id}/${gcodeData.gcode_id}`
+      `${API_BASE_URL}/api/preview/${uploadData.project_id}/${finalGcodeId}`
     );
     if (!previewRes.ok) {
       setStatus("Preview failed.");
+      setJobProgress(100);
       return;
     }
 
@@ -333,6 +439,7 @@ export default function Home() {
     setPlayhead(0);
     setPlaying(false);
     setStatus("Ready");
+    setJobProgress(100);
   };
 
   return (
@@ -450,6 +557,161 @@ export default function Home() {
           </div>
           <div className="controls">
             <label>
+              Presets
+              <select
+                value=""
+                onChange={(e) => {
+                  const selected = presets.find(
+                    (preset) => preset.name === e.target.value
+                  );
+                  if (!selected) return;
+                  setVMode(selected.mode);
+                  setVColorMode(selected.colormode);
+                  setVHierarchical(selected.hierarchical);
+                  setVFilterSpeckle(selected.filter_speckle);
+                  setVColorPrecision(selected.color_precision);
+                  setVLengthThreshold(selected.length_threshold);
+                  setVCornerThreshold(selected.corner_threshold);
+                  setVSegmentLength(selected.segment_length);
+                  setVSpiro(selected.spiro);
+                }}
+              >
+                <option value="">Select preset</option>
+                {presets.map((preset) => (
+                  <option key={preset.name} value={preset.name}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Save Preset
+              <div className="preset-row">
+                <input
+                  type="text"
+                  placeholder="Preset name"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                />
+                <button
+                  className="btn ghost"
+                  onClick={async () => {
+                    if (!projectId || !presetName.trim()) return;
+                    const saveRes = await fetch(
+                      `${API_BASE_URL}/api/presets/vectorize`,
+                      {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          project_id: projectId,
+                          preset: {
+                            name: presetName.trim(),
+                            mode: vMode,
+                            colormode: vColorMode,
+                            hierarchical: vHierarchical,
+                            filter_speckle: vFilterSpeckle,
+                            color_precision: vColorPrecision,
+                            length_threshold: vLengthThreshold,
+                            corner_threshold: vCornerThreshold,
+                            segment_length: vSegmentLength,
+                            spiro: vSpiro
+                          }
+                        })
+                      }
+                    );
+                    if (saveRes.ok) {
+                      const nextPresets = await saveRes.json();
+                      setPresets(nextPresets.presets || []);
+                      setPresetName("");
+                    }
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </label>
+            <label>
+              Vector Mode
+              <select value={vMode} onChange={(e) => setVMode(e.target.value)}>
+                <option value="color">Color</option>
+                <option value="binary">Binary</option>
+              </select>
+            </label>
+            <label>
+              Color Mode
+              <select
+                value={vColorMode}
+                onChange={(e) => setVColorMode(e.target.value)}
+              >
+                <option value="color">Color</option>
+                <option value="bw">BW</option>
+              </select>
+            </label>
+            <label>
+              Filter Speckle
+              <input
+                type="number"
+                min="0"
+                value={vFilterSpeckle}
+                onChange={(e) => setVFilterSpeckle(Number(e.target.value))}
+              />
+            </label>
+            <label>
+              Color Precision
+              <input
+                type="number"
+                min="1"
+                value={vColorPrecision}
+                onChange={(e) => setVColorPrecision(Number(e.target.value))}
+              />
+            </label>
+            <label>
+              Length Threshold
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={vLengthThreshold}
+                onChange={(e) => setVLengthThreshold(Number(e.target.value))}
+              />
+            </label>
+            <label>
+              Corner Threshold
+              <input
+                type="number"
+                step="1"
+                min="0"
+                value={vCornerThreshold}
+                onChange={(e) => setVCornerThreshold(Number(e.target.value))}
+              />
+            </label>
+            <label>
+              Segment Length
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={vSegmentLength}
+                onChange={(e) => setVSegmentLength(Number(e.target.value))}
+              />
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={vHierarchical}
+                onChange={(e) => setVHierarchical(e.target.checked)}
+              />
+              Hierarchical
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={vSpiro}
+                onChange={(e) => setVSpiro(e.target.checked)}
+              />
+              Spiro
+            </label>
+            <label>
               Pen Down
               <input
                 type="text"
@@ -523,6 +785,15 @@ export default function Home() {
             </div>
           ) : null}
           <div className="status">{status}</div>
+          <div className="progress-wrap">
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{ width: `${jobProgress}%` }}
+              />
+            </div>
+            <div className="progress-text">{jobProgress}%</div>
+          </div>
           {meta ? (
             <div className="meta">
               ETA: {meta.estimated_time_s}s | Distance: {meta.distance_mm}mm |

@@ -160,6 +160,33 @@ html, body {
   margin-top: 4px;
 }
 
+.progress-wrap {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #0b0f13;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1cb9bf 0%, #5fe7ec 100%);
+  transition: width 180ms linear;
+}
+
+.progress-text {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .meta {
   margin-top: 6px;
   font-size: 12px;
@@ -191,8 +218,23 @@ html, body {
   gap: 4px;
 }
 
+.preset-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+
 .controls input[type="text"],
 .controls input[type="number"] {
+  background: #0b0f13;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.controls select {
   background: #0b0f13;
   color: var(--text);
   border: 1px solid var(--border);
