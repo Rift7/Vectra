@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Project",
+  "type": "object",
+  "properties": {
+    "project_id": { "type": "string" },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file_id": { "type": "string" },
+          "filename": { "type": "string" },
+          "type": { "type": "string" }
+        },
+        "required": ["file_id", "filename", "type"]
+      }
+    }
+  },
+  "required": ["project_id", "files"]
+}
