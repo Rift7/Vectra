@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import uuid4
 import shutil
+from typing import Optional
 
 DATA_ROOT = Path("data/projects")
 
@@ -27,3 +28,40 @@ def save_upload(project_id: str, filename: str, file_obj) -> str:
     with dest_path.open("wb") as f:
         shutil.copyfileobj(file_obj, f)
     return file_id
+
+
+def save_intermediate(project_id: str, filename: str, content: str) -> str:
+    file_id = uuid4().hex
+    project_dir = ensure_project_dir(project_id)
+    dest_path = project_dir / "intermediate" / f"{file_id}_{filename}"
+    dest_path.write_text(content)
+    return file_id
+
+
+def save_output(project_id: str, filename: str, content: str) -> str:
+    file_id = uuid4().hex
+    project_dir = ensure_project_dir(project_id)
+    dest_path = project_dir / "outputs" / f"{file_id}_{filename}"
+    dest_path.write_text(content)
+    return file_id
+
+
+def find_source_file(project_id: str, file_id: str) -> Optional[Path]:
+    project_dir = ensure_project_dir(project_id)
+    source_dir = project_dir / "source"
+    matches = list(source_dir.glob(f"{file_id}_*"))
+    return matches[0] if matches else None
+
+
+def find_output_file(project_id: str, file_id: str) -> Optional[Path]:
+    project_dir = ensure_project_dir(project_id)
+    output_dir = project_dir / "outputs"
+    matches = list(output_dir.glob(f"{file_id}_*"))
+    return matches[0] if matches else None
+
+
+def find_intermediate_file(project_id: str, file_id: str) -> Optional[Path]:
+    project_dir = ensure_project_dir(project_id)
+    intermediate_dir = project_dir / "intermediate"
+    matches = list(intermediate_dir.glob(f"{file_id}_*"))
+    return matches[0] if matches else None

@@ -19,7 +19,7 @@ class VectorizeRequest(BaseModel):
 
 class ProcessRequest(BaseModel):
     project_id: str
-    svg_id: str
+    file_id: str
 
 
 class OptimizeRequest(BaseModel):
@@ -37,7 +37,11 @@ class GcodeResponse(BaseModel):
 
 class GcodeRequest(BaseModel):
     project_id: str
-    toolpath_id: str
+    svg_id: str
+    pen_down_cmd: str = "M3 S1000"
+    pen_up_cmd: str = "M5"
+    pen_dwell_s: float = 0.1
+    vertical_flip: bool = True
 
 
 class PreviewMeta(BaseModel):

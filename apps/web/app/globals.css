@@ -101,6 +101,19 @@ html, body {
   display: grid;
   place-items: center;
   position: relative;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+}
+
+.canvas-area:active {
+  cursor: grabbing;
+}
+
+.canvas-stage {
+  position: absolute;
+  inset: 0;
+  transform-origin: center;
 }
 
 .paper {
@@ -137,6 +150,12 @@ html, body {
   cursor: pointer;
 }
 
+.btn.ghost {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
 .status {
   margin-top: 4px;
 }
@@ -158,21 +177,66 @@ html, body {
   border-radius: 6px;
 }
 
-.svg-preview {
-  margin: 8px auto 6px;
-  width: 320px;
-  height: 220px;
-  border: 1px solid var(--border);
+.controls {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text);
+}
+
+.controls label {
+  display: grid;
+  gap: 4px;
+}
+
+.controls input[type="text"],
+.controls input[type="number"] {
   background: #0b0f13;
-  border-radius: 6px;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 11px;
+}
+
+.controls .checkbox {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.playback {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.scrubber {
+  width: 100%;
+}
+
+.playback-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.svg-layer {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
-  overflow: hidden;
+  pointer-events: none;
 }
 
 .svg-content {
-  width: 100%;
-  height: 100%;
+  width: 70%;
+  height: 70%;
+  transform-origin: center;
 }
 
 .svg-content svg {
@@ -184,6 +248,33 @@ html, body {
   margin: 8px auto 6px;
   font-size: 11px;
   color: var(--muted);
+}
+
+.gcode-layer {
+  position: absolute;
+  width: 70%;
+  height: 70%;
+  transform-origin: center;
+  fill: none;
+  stroke: #45f2ff;
+  stroke-width: 0.4;
+  pointer-events: none;
+}
+
+.preview-layer {
+  position: absolute;
+  width: 70%;
+  height: 70%;
+  transform-origin: center;
+  fill: none;
+  stroke: #f2b645;
+  stroke-width: 0.6;
+  pointer-events: none;
+}
+
+.preview-layer circle {
+  fill: #f2b645;
+  stroke: none;
 }
 
 .bottom-bar {
