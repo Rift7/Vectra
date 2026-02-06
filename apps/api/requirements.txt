@@ -4,4 +4,4 @@ pydantic==2.8.2
 python-multipart==0.0.9
 vpype==1.15.0
 vpype-gcode==0.7.0
-vtracer==0.6.4
+vtracer==0.6.12

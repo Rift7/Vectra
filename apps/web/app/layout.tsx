@@ -15,23 +15,45 @@ export default function RootLayout({
       <body>
         <div className="app-shell">
           <header className="top-bar">
-            <div className="brand">Vectra</div>
-            <div className="actions">Import | New | Save | Undo | Redo | Export</div>
+            <div className="brand-wrap">
+              <div className="brand">Vectra</div>
+              <div className="brand-subtitle">Plotter Slicer Workspace</div>
+            </div>
+            <div className="actions">
+              <button className="toolbar-btn">Import</button>
+              <button className="toolbar-btn">New</button>
+              <button className="toolbar-btn">Save</button>
+              <button className="toolbar-btn">Undo</button>
+              <button className="toolbar-btn">Redo</button>
+              <button className="toolbar-btn primary">Export</button>
+            </div>
           </header>
           <div className="main">
             <aside className="sidebar left">
               <div className="panel-title">Project</div>
-              <div className="panel-body">Files, pages, layers</div>
+              <div id="project-root" className="project-root" />
             </aside>
             <main className="canvas">
               {children}
             </main>
             <aside className="sidebar right">
               <div className="panel-title">Parameters</div>
-              <div className="panel-body">Tabs: Document, Vectorize, Cleanup...</div>
+              <div className="inspector-tabs">
+                <span className="inspector-chip active">Document</span>
+                <span className="inspector-chip">Vectorize</span>
+                <span className="inspector-chip">Optimization</span>
+                <span className="inspector-chip">Machine</span>
+                <span className="inspector-chip">Output</span>
+              </div>
+              <div id="inspector-root" className="inspector-root" />
             </aside>
           </div>
-          <footer className="bottom-bar">Cursor: 0,0 | Zoom 100% | ETA: --</footer>
+          <footer className="bottom-bar">
+            <span>Cursor: 0,0</span>
+            <span>Zoom: 100%</span>
+            <span>ETA: --</span>
+            <span>Status: waiting</span>
+          </footer>
         </div>
       </body>
     </html>

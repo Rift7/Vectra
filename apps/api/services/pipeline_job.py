@@ -4,6 +4,7 @@ from models.schemas import PipelineJobRequest
 from services.ingestion import ingest_to_svg_stub
 from services.job_manager import update_job
 from services.storage import (
+    append_run,
     ensure_project_dir,
     find_intermediate_file,
     find_source_file,
@@ -77,6 +78,18 @@ def run_pipeline_job(job_id: str, payload: PipelineJobRequest) -> None:
     )
     run_vpype_to_gcode(Path(processed_svg_path), gcode_path, g_profile)
     gcode_id = save_output(payload.project_id, "plot.gcode", gcode_path.read_text())
+    append_run(
+        payload.project_id,
+        {
+            "job_id": job_id,
+            "source_kind": source_kind,
+            "source_file_id": payload.file_id,
+            "ingest_svg_id": working_svg_id,
+            "processed_svg_id": processed_svg_id,
+            "gcode_id": gcode_id,
+            "status": "completed"
+        }
+    )
 
     update_job(
         job_id,

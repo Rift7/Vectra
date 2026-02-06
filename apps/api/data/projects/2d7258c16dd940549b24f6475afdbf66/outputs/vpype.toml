@@ -1,0 +1,17 @@
+[gwrite.vectra_plotter]
+unit = "mm"
+document_start = """G21
+G90
+"""
+layer_start = "(Start Layer)\n"
+line_start = "(Start Line)\n"
+segment_first = """G00 X{x:.3f} Y{y:.3f}
+M3 S1000
+G4 P0.1
+"""
+segment = "G01 X{x:.3f} Y{y:.3f}\n"
+line_end = """M5
+G4 P0.1
+"""
+document_end = "M5\nG00 X0 Y0\n"
+vertical_flip = true

@@ -3,6 +3,7 @@ from uuid import uuid4
 import shutil
 from typing import Optional
 import json
+from datetime import datetime, timezone
 
 DATA_ROOT = Path("data/projects")
 
@@ -91,3 +92,50 @@ def save_presets(project_id: str, presets: list) -> None:
     project_dir = ensure_project_dir(project_id)
     preset_path = project_dir / "presets.json"
     preset_path.write_text(json.dumps(presets, indent=2))
+
+
+def _list_dir_items(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    items = []
+    for p in sorted(path.iterdir(), key=lambda x: x.name.lower()):
+        if p.is_file():
+            items.append(
+                {
+                    "id": p.name.split("_", 1)[0] if "_" in p.name else p.stem,
+                    "name": p.name,
+                    "size": p.stat().st_size
+                }
+            )
+    return items
+
+
+def load_project_tree(project_id: str) -> dict:
+    project_dir = ensure_project_dir(project_id)
+    return {
+        "project_id": project_id,
+        "source": _list_dir_items(project_dir / "source"),
+        "intermediate": _list_dir_items(project_dir / "intermediate"),
+        "outputs": _list_dir_items(project_dir / "outputs")
+    }
+
+
+def load_runs(project_id: str) -> list:
+    project_dir = ensure_project_dir(project_id)
+    runs_path = project_dir / "runs.json"
+    if not runs_path.exists():
+        return []
+    try:
+        data = json.loads(runs_path.read_text())
+        return data if isinstance(data, list) else []
+    except json.JSONDecodeError:
+        return []
+
+
+def append_run(project_id: str, run: dict) -> None:
+    project_dir = ensure_project_dir(project_id)
+    runs_path = project_dir / "runs.json"
+    runs = load_runs(project_id)
+    stamped = {"created_at": datetime.now(timezone.utc).isoformat(), **run}
+    runs.insert(0, stamped)
+    runs_path.write_text(json.dumps(runs[:100], indent=2))
