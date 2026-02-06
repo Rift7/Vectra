@@ -324,8 +324,7 @@ html, body {
   border: 1px dashed var(--border);
   background: var(--panel-2);
   border-radius: 8px;
-  display: grid;
-  place-items: center;
+  display: block;
   position: relative;
   overflow: hidden;
   touch-action: none;
@@ -340,6 +339,16 @@ html, body {
   position: absolute;
   inset: 0;
   transform-origin: center;
+}
+
+.canvas-pane {
+  position: absolute;
+  inset: 0;
+}
+
+.design-canvas {
+  position: absolute;
+  inset: 0;
 }
 
 .paper {
@@ -708,15 +717,49 @@ html, body {
 }
 
 .bottom-bar {
-  height: 28px;
+  min-height: 36px;
   background: var(--panel);
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 0 12px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.bottom-bar-root {
+  width: 100%;
+}
+
+.bottom-bar-content {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bottom-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  white-space: nowrap;
+}
+
+.bottom-controls {
+  gap: 6px;
+}
+
+.bottom-btn {
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 @media (max-width: 1200px) {

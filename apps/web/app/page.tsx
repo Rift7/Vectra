@@ -2,7 +2,33 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import dynamic from "next/dynamic";
 import { API_BASE_URL } from "../lib/api";
+import {
+  type ArtTransform,
+  type MachineConfig,
+  getBaseScale,
+  getBedMetrics as getSharedBedMetrics,
+  getUnitFactor,
+  isTransformInsideWorkArea
+} from "../lib/canvas-transform";
+import {
+  type ArtTransformAction,
+  getNextArtTransform,
+  useArtTransform
+} from "../lib/use-art-transform";
+
+const DesignCanvas = dynamic(() => import("../components/DesignCanvas"), {
+  ssr: false
+});
+
+const INITIAL_ART_TRANSFORM: ArtTransform = {
+  xMm: 0,
+  yMm: 0,
+  scaleX: 1,
+  scaleY: 1,
+  rotation: 0
+};
 
 type PreviewMeta = {
   estimated_time_s: number;
@@ -55,30 +81,6 @@ type ProjectRun = {
   status: string;
 };
 
-type MachineConfig = {
-  width: number;
-  height: number;
-  unit: "mm" | "in";
-};
-
-type ArtTransform = {
-  xMm: number;
-  yMm: number;
-  scaleX: number;
-  scaleY: number;
-  rotation: number;
-};
-
-type HandleId =
-  | "n"
-  | "s"
-  | "e"
-  | "w"
-  | "ne"
-  | "nw"
-  | "se"
-  | "sw";
-
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string>("Idle");
@@ -106,13 +108,7 @@ export default function Home() {
     height: 297,
     unit: "mm"
   });
-  const [artTransform, setArtTransform] = useState<ArtTransform>({
-    xMm: 0,
-    yMm: 0,
-    scaleX: 1,
-    scaleY: 1,
-    rotation: 0
-  });
+  const { artTransform, setTransform, resetTransform } = useArtTransform(INITIAL_ART_TRANSFORM);
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -145,11 +141,10 @@ export default function Home() {
   });
   const [inspectorRoot, setInspectorRoot] = useState<HTMLElement | null>(null);
   const [projectRoot, setProjectRoot] = useState<HTMLElement | null>(null);
+  const [bottomBarRoot, setBottomBarRoot] = useState<HTMLElement | null>(null);
   const [projectTree, setProjectTree] = useState<ProjectTree | null>(null);
   const [projectRuns, setProjectRuns] = useState<ProjectRun[]>([]);
   const [selectedRunKey, setSelectedRunKey] = useState<string | null>(null);
-  const [draggingArt, setDraggingArt] = useState(false);
-  const [artDragStart, setArtDragStart] = useState<{ x: number; y: number } | null>(null);
   const [snapToGrid, setSnapToGrid] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [gridStepMm, setGridStepMm] = useState(10);
@@ -157,25 +152,14 @@ export default function Home() {
   const [rotateNudgeMode, setRotateNudgeMode] = useState(false);
   const [transformWarning, setTransformWarning] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
-  const artBoundsRef = useRef<HTMLDivElement | null>(null);
-  const interactionRef = useRef<{
-    mode: "move" | "scale" | "rotate";
-    startX: number;
-    startY: number;
-    startTransform: ArtTransform;
-    centerX?: number;
-    centerY?: number;
-    startDistance?: number;
-    startAngle?: number;
-    startLocalX?: number;
-    startLocalY?: number;
-    handle?: HandleId;
-  } | null>(null);
+  const [designView, setDesignView] = useState({ x: 0, y: 0, scale: 1 });
+  const [designCursor, setDesignCursor] = useState<{ xMm: number; yMm: number } | null>(null);
   const sectionStorageKey = "vectra.inspector.sections";
 
   useEffect(() => {
     setInspectorRoot(document.getElementById("inspector-root"));
     setProjectRoot(document.getElementById("project-root"));
+    setBottomBarRoot(document.getElementById("bottom-bar-root"));
     const raw = window.localStorage.getItem(sectionStorageKey);
     if (!raw) return;
     try {
@@ -206,81 +190,19 @@ export default function Home() {
   }, [openSections]);
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!svgMarkup) return;
-      if (event.metaKey || event.ctrlKey) return;
-      const target = event.target as HTMLElement | null;
-      const tag = target?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select" || target?.isContentEditable) {
-        return;
-      }
-
-      if (event.key.toLowerCase() === "r") {
-        event.preventDefault();
-        setRotateNudgeMode((prev) => !prev);
-        return;
-      }
-
-      const isArrow = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key);
-      if (!isArrow) return;
-      event.preventDefault();
-
-      if (rotateNudgeMode) {
-        const rotateStep = event.shiftKey ? 5 : 1;
-        const scaleStep = event.shiftKey ? 0.1 : 0.02;
-        if (event.key === "ArrowLeft") {
-          applyConstrainedTransform({
-            ...artTransform,
-            rotation: artTransform.rotation - rotateStep
-          });
-          return;
-        }
-        if (event.key === "ArrowRight") {
-          applyConstrainedTransform({
-            ...artTransform,
-            rotation: artTransform.rotation + rotateStep
-          });
-          return;
-        }
-        if (event.key === "ArrowUp") {
-          applyConstrainedTransform({
-            ...artTransform,
-            scaleX: Math.max(0.05, artTransform.scaleX + scaleStep),
-            scaleY: Math.max(0.05, artTransform.scaleY + scaleStep)
-          });
-          return;
-        }
-        if (event.key === "ArrowDown") {
-          applyConstrainedTransform({
-            ...artTransform,
-            scaleX: Math.max(0.05, artTransform.scaleX - scaleStep),
-            scaleY: Math.max(0.05, artTransform.scaleY - scaleStep)
-          });
-          return;
-        }
-      }
-
-      const stepMm = event.shiftKey ? 10 : event.altKey ? 0.2 : 1;
-      let dx = 0;
-      let dy = 0;
-      if (event.key === "ArrowLeft") dx = -stepMm;
-      if (event.key === "ArrowRight") dx = stepMm;
-      if (event.key === "ArrowUp") dy = -stepMm;
-      if (event.key === "ArrowDown") dy = stepMm;
-      applyConstrainedTransform({
-        ...artTransform,
-        xMm: artTransform.xMm + dx,
-        yMm: artTransform.yMm + dy
-      });
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [svgMarkup, rotateNudgeMode, artTransform]);
-
-  useEffect(() => {
     if (!svgMarkup || !svgSize) return;
-    if (isTransformInsideWorkArea(artTransform)) {
+    const bed = getBedMetrics();
+    if (
+      !bed ||
+      isTransformInsideWorkArea(artTransform, {
+        artWidth: svgSize.w,
+        artHeight: svgSize.h,
+        baseScale: svgBaseScale,
+        pxPerMm: bed.pxPerMm,
+        bedW: bed.bedW,
+        bedH: bed.bedH
+      })
+    ) {
       setTransformWarning(null);
     } else {
       setTransformWarning("Artwork exceeds machine work area.");
@@ -349,100 +271,62 @@ export default function Home() {
     const paperW = bed.bedW;
     const paperH = bed.bedH;
     if (paperW <= 0 || paperH <= 0) return;
-    const scale = Math.min(paperW / svgSize.w, paperH / svgSize.h);
+    const scale = getBaseScale(svgSize.w, svgSize.h, paperW, paperH);
     if (Number.isFinite(scale) && scale > 0) {
       setSvgBaseScale(scale);
       setView({ x: 0, y: 0, scale: 1 });
-      setArtTransform((prev) => ({
-        ...prev,
-        xMm: 0,
-        yMm: 0,
-        scaleX: 1,
-        scaleY: 1,
-        rotation: 0
-      }));
+      resetTransform();
       setTransformWarning(null);
     }
   };
 
   const resetArtTransform = () => {
-    setArtTransform({
-      xMm: 0,
-      yMm: 0,
-      scaleX: 1,
-      scaleY: 1,
-      rotation: 0
-    });
+    resetTransform();
+    setTransformWarning(null);
   };
-
-  const getUnitFactor = () => (machine.unit === "mm" ? 1 : 25.4);
-
-  const getMachineMm = () => ({
-    widthMm: machine.width * getUnitFactor(),
-    heightMm: machine.height * getUnitFactor()
-  });
 
   const getBedMetrics = () => {
     if (!canvasRef.current) return null;
     const rect = canvasRef.current.getBoundingClientRect();
-    const { widthMm, heightMm } = getMachineMm();
-    const ratio = widthMm / Math.max(1e-6, heightMm);
-    let bedW: number;
-    let bedH: number;
-    if (ratio >= 1) {
-      bedW = rect.width * 0.7;
-      bedH = bedW / ratio;
-    } else {
-      bedH = rect.height * 0.7;
-      bedW = bedH * ratio;
-    }
-    const pxPerMm = bedW / Math.max(widthMm, 1e-6);
-    return { bedW, bedH, pxPerMm };
-  };
-
-  const isTransformInsideWorkArea = (candidate: ArtTransform) => {
-    if (!svgSize) return true;
-    const bed = getBedMetrics();
-    if (!bed) return true;
-    const artW = svgSize.w * svgBaseScale * candidate.scaleX;
-    const artH = svgSize.h * svgBaseScale * candidate.scaleY;
-    const tx = candidate.xMm * bed.pxPerMm;
-    const ty = candidate.yMm * bed.pxPerMm;
-    const rad = (candidate.rotation * Math.PI) / 180;
-    const c = Math.cos(rad);
-    const s = Math.sin(rad);
-    const hw = artW / 2;
-    const hh = artH / 2;
-    const corners = [
-      { x: -hw, y: -hh },
-      { x: hw, y: -hh },
-      { x: hw, y: hh },
-      { x: -hw, y: hh }
-    ];
-    for (const p of corners) {
-      const rx = tx + p.x * c - p.y * s;
-      const ry = ty + p.x * s + p.y * c;
-      if (Math.abs(rx) > bed.bedW / 2 || Math.abs(ry) > bed.bedH / 2) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const snapValue = (value: number, step: number) => {
-    if (step <= 0) return value;
-    return Math.round(value / step) * step;
+    return getSharedBedMetrics(rect.width, rect.height, machine);
   };
 
   const applyConstrainedTransform = (candidate: ArtTransform) => {
-    if (isTransformInsideWorkArea(candidate)) {
-      setArtTransform(candidate);
+    if (!svgSize) {
+      setTransform(candidate);
       setTransformWarning(null);
       return true;
     }
-    setTransformWarning("Artwork exceeds machine work area.");
-    return false;
+    const bed = getBedMetrics();
+    if (
+      bed &&
+      !isTransformInsideWorkArea(candidate, {
+        artWidth: svgSize.w,
+        artHeight: svgSize.h,
+        baseScale: svgBaseScale,
+        pxPerMm: bed.pxPerMm,
+        bedW: bed.bedW,
+        bedH: bed.bedH
+      })
+    ) {
+      setTransformWarning("Artwork exceeds machine work area.");
+      return false;
+    }
+    if (!bed) {
+      setTransform(candidate);
+      setTransformWarning(null);
+      return true;
+    }
+    setTransform(candidate);
+    setTransformWarning(null);
+    return true;
   };
+
+  const applyConstrainedAction = (action: ArtTransformAction) =>
+    applyConstrainedTransform(
+      getNextArtTransform(artTransform, action, INITIAL_ART_TRANSFORM)
+    );
+  const unitFactor = getUnitFactor(machine.unit);
 
   const parseSvgSize = (markup: string) => {
     try {
@@ -643,8 +527,6 @@ export default function Home() {
 
   useEffect(() => {
     fitToPaper();
-    window.addEventListener("resize", fitToPaper);
-    return () => window.removeEventListener("resize", fitToPaper);
   }, [svgSize]);
 
   const handleUpload = async () => {
@@ -796,6 +678,65 @@ export default function Home() {
     setStatus("Ready");
     setJobProgress(100);
     await refreshProjectData(uploadData.project_id);
+  };
+
+  const activeZoom = canvasTab === "design" ? designView.scale : view.scale;
+  const activeCursor = canvasTab === "design" ? designCursor : null;
+  const etaText =
+    meta && Number.isFinite(meta.estimated_time_s)
+      ? `${Math.max(0, Math.round(meta.estimated_time_s))}s`
+      : "--";
+  const statusText = status || "Idle";
+
+  const zoomCanvas = (factor: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.width / 2 : 0;
+    const cy = rect ? rect.height / 2 : 0;
+    if (canvasTab === "design") {
+      const oldScale = designView.scale;
+      const nextScale = Math.max(0.2, Math.min(8, oldScale * factor));
+      const anchorX = (cx - designView.x) / oldScale;
+      const anchorY = (cy - designView.y) / oldScale;
+      setDesignView({
+        scale: nextScale,
+        x: cx - anchorX * nextScale,
+        y: cy - anchorY * nextScale
+      });
+      return;
+    }
+    const oldScale = view.scale;
+    const nextScale = Math.max(0.2, Math.min(8, oldScale * factor));
+    const anchorX = (cx - view.x) / oldScale;
+    const anchorY = (cy - view.y) / oldScale;
+    setView({
+      scale: nextScale,
+      x: cx - anchorX * nextScale,
+      y: cy - anchorY * nextScale
+    });
+  };
+
+  const fitCanvasView = () => {
+    if (canvasTab === "design") {
+      setDesignView({ x: 0, y: 0, scale: 1 });
+      return;
+    }
+    setView({ x: 0, y: 0, scale: 1 });
+  };
+
+  const setCanvasScale100 = () => {
+    if (canvasTab === "design") {
+      setDesignView((prev) => ({ ...prev, scale: 1 }));
+      return;
+    }
+    setView((prev) => ({ ...prev, scale: 1 }));
+  };
+
+  const resetCanvasPan = () => {
+    if (canvasTab === "design") {
+      setDesignView((prev) => ({ ...prev, x: 0, y: 0 }));
+      return;
+    }
+    setView((prev) => ({ ...prev, x: 0, y: 0 }));
   };
 
   const inspectorPanel = (
@@ -1067,11 +1008,11 @@ export default function Home() {
                 <input
                   type="number"
                   step={machine.unit === "mm" ? "1" : "0.05"}
-                  value={Number((artTransform.xMm / getUnitFactor()).toFixed(2))}
+                  value={Number((artTransform.xMm / unitFactor).toFixed(2))}
                   onChange={(e) =>
-                    applyConstrainedTransform({
-                      ...artTransform,
-                      xMm: Number(e.target.value) * getUnitFactor()
+                    applyConstrainedAction({
+                      type: "patch",
+                      value: { xMm: Number(e.target.value) * unitFactor }
                     })
                   }
                 />
@@ -1081,11 +1022,11 @@ export default function Home() {
                 <input
                   type="number"
                   step={machine.unit === "mm" ? "1" : "0.05"}
-                  value={Number((artTransform.yMm / getUnitFactor()).toFixed(2))}
+                  value={Number((artTransform.yMm / unitFactor).toFixed(2))}
                   onChange={(e) =>
-                    applyConstrainedTransform({
-                      ...artTransform,
-                      yMm: Number(e.target.value) * getUnitFactor()
+                    applyConstrainedAction({
+                      type: "patch",
+                      value: { yMm: Number(e.target.value) * unitFactor }
                     })
                   }
                 />
@@ -1098,9 +1039,11 @@ export default function Home() {
                   min="0.1"
                   value={Number(artTransform.scaleX.toFixed(2))}
                   onChange={(e) =>
-                    applyConstrainedTransform({
-                      ...artTransform,
-                      scaleX: Math.max(0.1, Number(e.target.value) || artTransform.scaleX)
+                    applyConstrainedAction({
+                      type: "patch",
+                      value: {
+                        scaleX: Math.max(0.1, Number(e.target.value) || artTransform.scaleX)
+                      }
                     })
                   }
                 />
@@ -1113,9 +1056,11 @@ export default function Home() {
                   min="0.1"
                   value={Number(artTransform.scaleY.toFixed(2))}
                   onChange={(e) =>
-                    applyConstrainedTransform({
-                      ...artTransform,
-                      scaleY: Math.max(0.1, Number(e.target.value) || artTransform.scaleY)
+                    applyConstrainedAction({
+                      type: "patch",
+                      value: {
+                        scaleY: Math.max(0.1, Number(e.target.value) || artTransform.scaleY)
+                      }
                     })
                   }
                 />
@@ -1127,9 +1072,9 @@ export default function Home() {
                   step="1"
                   value={Math.round(artTransform.rotation)}
                   onChange={(e) =>
-                    applyConstrainedTransform({
-                      ...artTransform,
-                      rotation: Number(e.target.value)
+                    applyConstrainedAction({
+                      type: "patch",
+                      value: { rotation: Number(e.target.value) }
                     })
                   }
                 />
@@ -1153,10 +1098,10 @@ export default function Home() {
                   type="number"
                   min="0.1"
                   step={machine.unit === "mm" ? "0.5" : "0.01"}
-                  value={Number((gridStepMm / getUnitFactor()).toFixed(2))}
+                  value={Number((gridStepMm / unitFactor).toFixed(2))}
                   onChange={(e) =>
                     setGridStepMm(
-                      Math.max(0.1, Number(e.target.value) * getUnitFactor() || gridStepMm)
+                      Math.max(0.1, Number(e.target.value) * unitFactor || gridStepMm)
                     )
                   }
                 />
@@ -1175,10 +1120,10 @@ export default function Home() {
                   type="number"
                   min="0.1"
                   step={machine.unit === "mm" ? "0.5" : "0.01"}
-                  value={Number((snapStepMm / getUnitFactor()).toFixed(2))}
+                  value={Number((snapStepMm / unitFactor).toFixed(2))}
                   onChange={(e) =>
                     setSnapStepMm(
-                      Math.max(0.1, Number(e.target.value) * getUnitFactor() || snapStepMm)
+                      Math.max(0.1, Number(e.target.value) * unitFactor || snapStepMm)
                     )
                   }
                 />
@@ -1189,7 +1134,7 @@ export default function Home() {
               <div className="transform-hint">
                 Keyboard: `R` toggles {rotateNudgeMode ? "Rotate" : "Move"} mode.
                 Arrows nudge. `Shift` = coarse, `Alt` = fine.
-                {snapToGrid ? ` Snap: ${Number((snapStepMm / getUnitFactor()).toFixed(2))} ${machine.unit}.` : ""}
+                {snapToGrid ? ` Snap: ${Number((snapStepMm / unitFactor).toFixed(2))} ${machine.unit}.` : ""}
               </div>
               <label>
                 Pen Down
@@ -1420,6 +1365,39 @@ export default function Home() {
     </div>
   );
 
+  const bottomBarPanel = (
+    <div className="bottom-bar-content">
+      <div className="bottom-group">
+        <span>
+          Cursor:{" "}
+          {activeCursor
+            ? `${activeCursor.xMm.toFixed(1)}, ${activeCursor.yMm.toFixed(1)} mm`
+            : "--"}
+        </span>
+        <span>Zoom: {Math.round(activeZoom * 100)}%</span>
+        <span>ETA: {etaText}</span>
+        <span>Status: {statusText}</span>
+      </div>
+      <div className="bottom-group bottom-controls">
+        <button className="bottom-btn" onClick={fitCanvasView}>
+          Fit
+        </button>
+        <button className="bottom-btn" onClick={setCanvasScale100}>
+          100%
+        </button>
+        <button className="bottom-btn" onClick={() => zoomCanvas(1.1)}>
+          +
+        </button>
+        <button className="bottom-btn" onClick={() => zoomCanvas(0.9)}>
+          -
+        </button>
+        <button className="bottom-btn" onClick={resetCanvasPan}>
+          Reset Pan
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <>
       <div className="canvas-content">
@@ -1441,72 +1419,12 @@ export default function Home() {
         className="canvas-area"
         ref={canvasRef}
         onPointerDown={(e) => {
-          if (interactionRef.current) return;
+          if (canvasTab !== "preview") return;
           setPanning(true);
           setLastPoint({ x: e.clientX, y: e.clientY });
         }}
         onPointerMove={(e) => {
-          const interaction = interactionRef.current;
-          if (interaction) {
-            const bed = getBedMetrics();
-            if (!bed) return;
-            if (interaction.mode === "move") {
-              const dx = e.clientX - interaction.startX;
-              const dy = e.clientY - interaction.startY;
-              let xMm = interaction.startTransform.xMm + dx / (view.scale * bed.pxPerMm);
-              let yMm = interaction.startTransform.yMm + dy / (view.scale * bed.pxPerMm);
-              if (snapToGrid) {
-                xMm = snapValue(xMm, snapStepMm);
-                yMm = snapValue(yMm, snapStepMm);
-              }
-              applyConstrainedTransform({
-                ...interaction.startTransform,
-                xMm,
-                yMm
-              });
-            } else if (interaction.mode === "scale") {
-              if (
-                interaction.centerX === undefined ||
-                interaction.centerY === undefined ||
-                interaction.startLocalX === undefined ||
-                interaction.startLocalY === undefined ||
-                !interaction.handle
-              ) return;
-              const rad = (interaction.startTransform.rotation * Math.PI) / 180;
-              const c = Math.cos(rad);
-              const s = Math.sin(rad);
-              const dx = e.clientX - interaction.centerX;
-              const dy = e.clientY - interaction.centerY;
-              const localX = dx * c + dy * s;
-              const localY = -dx * s + dy * c;
-              let scaleX = interaction.startTransform.scaleX;
-              let scaleY = interaction.startTransform.scaleY;
-              const hx = interaction.handle.includes("e") || interaction.handle.includes("w");
-              const hy = interaction.handle.includes("n") || interaction.handle.includes("s");
-              if (hx) {
-                const ratioX = Math.abs(localX) / Math.max(1, Math.abs(interaction.startLocalX));
-                scaleX = Math.max(0.05, interaction.startTransform.scaleX * ratioX);
-              }
-              if (hy) {
-                const ratioY = Math.abs(localY) / Math.max(1, Math.abs(interaction.startLocalY));
-                scaleY = Math.max(0.05, interaction.startTransform.scaleY * ratioY);
-              }
-              applyConstrainedTransform({
-                ...interaction.startTransform,
-                scaleX,
-                scaleY
-              });
-            } else if (interaction.mode === "rotate") {
-              if (!interaction.centerX || !interaction.centerY || interaction.startAngle === undefined) return;
-              const angle = Math.atan2(e.clientY - interaction.centerY, e.clientX - interaction.centerX);
-              const deltaDeg = ((angle - interaction.startAngle) * 180) / Math.PI;
-              applyConstrainedTransform({
-                ...interaction.startTransform,
-                rotation: interaction.startTransform.rotation + deltaDeg
-              });
-            }
-            return;
-          }
+          if (canvasTab !== "preview") return;
           if (!panning || !lastPoint) return;
           const dx = e.clientX - lastPoint.x;
           const dy = e.clientY - lastPoint.y;
@@ -1516,18 +1434,13 @@ export default function Home() {
         onPointerUp={() => {
           setPanning(false);
           setLastPoint(null);
-          setDraggingArt(false);
-          setArtDragStart(null);
-          interactionRef.current = null;
         }}
         onPointerLeave={() => {
           setPanning(false);
           setLastPoint(null);
-          setDraggingArt(false);
-          setArtDragStart(null);
-          interactionRef.current = null;
         }}
         onWheel={(e) => {
+          if (canvasTab !== "preview") return;
           e.preventDefault();
           const zoomFactor = 1 - e.deltaY * 0.001;
           setView((prev) => {
@@ -1537,156 +1450,42 @@ export default function Home() {
         }}
       >
         <div
-          className="canvas-stage"
+          className="canvas-pane"
           style={{
-            transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`
+            display: canvasTab === "design" ? "block" : "none"
           }}
         >
-          {(() => {
-            const bed = getBedMetrics();
-            const bedStyle =
-              machine.width >= machine.height
-                ? { width: "70%", aspectRatio: `${machine.width} / ${machine.height}` }
-                : { height: "70%", aspectRatio: `${machine.width} / ${machine.height}` };
-            const minorGridPx = bed ? Math.max(3, bed.pxPerMm * gridStepMm) : 12;
-            const majorGridPx = minorGridPx * 5;
-            const gridStyle = showGrid
-              ? {
-                  backgroundImage: [
-                    "linear-gradient(to right, rgba(97, 220, 226, 0.12) 1px, transparent 1px)",
-                    "linear-gradient(to bottom, rgba(97, 220, 226, 0.12) 1px, transparent 1px)",
-                    "linear-gradient(to right, rgba(97, 220, 226, 0.22) 1px, transparent 1px)",
-                    "linear-gradient(to bottom, rgba(97, 220, 226, 0.22) 1px, transparent 1px)"
-                  ].join(","),
-                  backgroundSize: [
-                    `${minorGridPx}px ${minorGridPx}px`,
-                    `${minorGridPx}px ${minorGridPx}px`,
-                    `${majorGridPx}px ${majorGridPx}px`,
-                    `${majorGridPx}px ${majorGridPx}px`
-                  ].join(",")
-                }
-              : {};
-            const xPx = bed ? artTransform.xMm * bed.pxPerMm : 0;
-            const yPx = bed ? artTransform.yMm * bed.pxPerMm : 0;
-            const scaledWidth = svgSize
-              ? svgSize.w * svgBaseScale * artTransform.scaleX
-              : 0;
-            const scaledHeight = svgSize
-              ? svgSize.h * svgBaseScale * artTransform.scaleY
-              : 0;
-            const transform = `translate(${xPx}px, ${yPx}px) rotate(${artTransform.rotation}deg)`;
-            return (
-              <>
+          <DesignCanvas
+            isActive={canvasTab === "design"}
+            svgMarkup={svgMarkup}
+            machine={machine}
+            artTransform={artTransform}
+            onTransformAction={applyConstrainedAction}
+            showGrid={showGrid}
+            gridStepMm={gridStepMm}
+            snapToGrid={snapToGrid}
+            snapStepMm={snapStepMm}
+            onBaseScaleChange={setSvgBaseScale}
+            view={designView}
+            onViewChange={setDesignView}
+            onCursorChange={setDesignCursor}
+            rotateNudgeMode={rotateNudgeMode}
+            onRotateNudgeModeChange={setRotateNudgeMode}
+          />
+        </div>
+        <div
+          className="canvas-pane"
+          style={{
+            display: canvasTab === "preview" ? "block" : "none"
+          }}
+        >
           <div
-            className="paper"
+            className="canvas-stage"
             style={{
-              ...bedStyle,
-              ...gridStyle
+              transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})`
             }}
           >
-            {machine.width} x {machine.height} {machine.unit}
-          </div>
-          <div
-            className={`svg-layer ${canvasTab === "design" ? "interactive" : "hidden"}`}
-            aria-label="SVG Preview"
-          >
-            {svgMarkup ? (
-              <div
-                className="svg-content"
-                onPointerDown={(e) => {
-                  if (canvasTab !== "design") return;
-                  e.stopPropagation();
-                  setDraggingArt(true);
-                  setArtDragStart({ x: e.clientX, y: e.clientY });
-                  interactionRef.current = {
-                    mode: "move",
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    startTransform: { ...artTransform }
-                  };
-                }}
-                style={
-                  svgSize
-                    ? {
-                        width: `${svgSize.w * svgBaseScale * artTransform.scaleX}px`,
-                        height: `${svgSize.h * svgBaseScale * artTransform.scaleY}px`,
-                        transform: `translate(${xPx}px, ${yPx}px) rotate(${artTransform.rotation}deg)`
-                      }
-                    : undefined
-                }
-                dangerouslySetInnerHTML={{ __html: svgMarkup }}
-              />
-            ) : null}
-          </div>
-          {canvasTab === "design" && svgMarkup && svgSize ? (
-            <div
-              ref={artBoundsRef}
-              className={`art-bounds ${transformWarning ? "outside" : ""}`}
-              style={{
-                width: `${scaledWidth}px`,
-                height: `${scaledHeight}px`,
-                transform
-              }}
-            >
-              <button
-                className="rotate-grip"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  if (!artBoundsRef.current) return;
-                  const rect = artBoundsRef.current.getBoundingClientRect();
-                  const cx = rect.left + rect.width / 2;
-                  const cy = rect.top + rect.height / 2;
-                  interactionRef.current = {
-                    mode: "rotate",
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    startTransform: { ...artTransform },
-                    centerX: cx,
-                    centerY: cy,
-                    startAngle: Math.atan2(e.clientY - cy, e.clientX - cx)
-                  };
-                }}
-                aria-label="Rotate artwork"
-              />
-              {(["n", "s", "e", "w", "ne", "nw", "se", "sw"] as HandleId[]).map(
-                (handle) => (
-                  <button
-                    key={handle}
-                    className={`transform-handle ${handle}`}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                      if (!artBoundsRef.current) return;
-                  const rect = artBoundsRef.current.getBoundingClientRect();
-                  const cx = rect.left + rect.width / 2;
-                  const cy = rect.top + rect.height / 2;
-                  const dx = e.clientX - cx;
-                  const dy = e.clientY - cy;
-                  const rad = (artTransform.rotation * Math.PI) / 180;
-                  const c = Math.cos(rad);
-                  const s = Math.sin(rad);
-                  const startLocalX = dx * c + dy * s;
-                  const startLocalY = -dx * s + dy * c;
-                  interactionRef.current = {
-                    mode: "scale",
-                    startX: e.clientX,
-                    startY: e.clientY,
-                    startTransform: { ...artTransform },
-                    centerX: cx,
-                    centerY: cy,
-                    startLocalX,
-                    startLocalY,
-                    handle
-                  };
-                }}
-                    aria-label={`Resize ${handle}`}
-                  />
-                )
-              )}
-            </div>
-          ) : null}
-              </>
-            );
-          })()}
+            <div className="paper preview-paper">Preview Bed</div>
           {canvasTab === "preview" && gcodeStrokes.length > 0 && svgSize ? (
             <svg
               className="gcode-layer"
@@ -1722,6 +1521,7 @@ export default function Home() {
               />
             </svg>
           ) : null}
+          </div>
         </div>
         {!svgMarkup ? (
           <div className="canvas-empty-note">
@@ -1732,6 +1532,7 @@ export default function Home() {
       </div>
       {projectRoot ? createPortal(projectPanel, projectRoot) : null}
       {inspectorRoot ? createPortal(inspectorPanel, inspectorRoot) : null}
+      {bottomBarRoot ? createPortal(bottomBarPanel, bottomBarRoot) : null}
     </>
   );
 }

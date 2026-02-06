@@ -49,10 +49,7 @@ export default function RootLayout({
             </aside>
           </div>
           <footer className="bottom-bar">
-            <span>Cursor: 0,0</span>
-            <span>Zoom: 100%</span>
-            <span>ETA: --</span>
-            <span>Status: waiting</span>
+            <div id="bottom-bar-root" className="bottom-bar-root" />
           </footer>
         </div>
       </body>
